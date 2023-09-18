@@ -1,0 +1,218 @@
+Public Partial Class Form1
+    Inherits Form
+    Private m_dataGridBindingList As List(Of DataModel) = New List(Of DataModel)()
+    Private m_filteredList As List(Of DataModel) = Nothing
+
+    Public Sub New()
+        InitializeComponent()
+    End Sub
+
+    Private Sub Form1_Load(ByVal sender As Object, ByVal e As EventArgs)
+        StyleDataGridView(dataGridView1, True)
+        AddTestData()
+        SetupDataBinding()
+    End Sub
+
+    Private Sub SetupDataBinding()
+        m_filteredList = m_dataGridBindingList
+
+        dataGridView1.DataBindings.Clear()
+        dataGridView1.DataSource = Nothing
+        dataGridView1.DataSource = m_dataGridBindingList
+        dataGridView1.AutoResizeRows()
+    End Sub
+
+    Public Shared Sub StyleDataGridView(ByVal dgv As DataGridView, ByVal Optional isReadonly As Boolean = True)
+        Try
+            ' Setting the style of the DataGridView control
+            dgv.RowHeadersVisible = True
+            dgv.ColumnHeadersDefaultCellStyle.Font = New Font("Tahoma", 9, FontStyle.Bold, GraphicsUnit.Point)
+            dgv.ColumnHeadersDefaultCellStyle.BackColor = SystemColors.ControlDark
+            dgv.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.[Single]
+            dgv.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter
+            dgv.DefaultCellStyle.Font = New Font("Tahoma", 9, FontStyle.Regular, GraphicsUnit.Point)
+            dgv.DefaultCellStyle.BackColor = Color.Empty
+            dgv.CellBorderStyle = DataGridViewCellBorderStyle.[Single]
+            dgv.AllowUserToAddRows = False
+            dgv.[ReadOnly] = isReadonly
+            dgv.SelectionMode = DataGridViewSelectionMode.CellSelect
+            Dim dataGridViewCellStyle1 As Windows.Forms.DataGridViewCellStyle = New Windows.Forms.DataGridViewCellStyle()
+            dataGridViewCellStyle1.BackColor = Color.LightBlue
+            dgv.AlternatingRowsDefaultCellStyle = dataGridViewCellStyle1
+        Catch ex As Exception
+        End Try
+    End Sub
+
+
+    Private Sub AddTestData()
+        Dim r As Random = New Random()
+
+        Dim words As List(Of String) = New List(Of String)()
+        words.Add("seemly")
+        words.Add("puncture")
+        words.Add("puntastic")
+        words.Add("imaginary")
+        words.Add("absent")
+        words.Add("discover")
+        words.Add("spiteful")
+        words.Add("seen")
+        words.Add("paint")
+        words.Add("oceanic")
+        words.Add("ignorant")
+
+        For i = 0 To 10
+            Dim d As DataModel = New DataModel()
+            d.DataPointId = i
+
+            d.Description = words(i)
+            d.InAlarm = If(i Mod 2 = 0, True, False)
+            d.LastUpdate = Date.Today.AddHours(i * 2).AddHours(If(i Mod 2 = 0, i * 10 + 1, 0)).AddMinutes(If(i Mod 2 = 0, i * 10 + 1, 0)).AddSeconds(If(i Mod 2 = 0, i * 10 + 1, 0)).AddMilliseconds(If(i Mod 2 = 0, i * 10 + 1, 0))
+            d.ScalingMultiplier = CDbl(i) * 6 / 3
+            d.Price = CDec(i) * 7 / 3
+
+            m_dataGridBindingList.Add(d)
+        Next
+
+
+    End Sub
+
+    Private Sub advancedDataGridView1_EnabledChanged(ByVal sender As Object, ByVal e As EventArgs)
+
+    End Sub
+
+    Private Sub advancedDataGridView1_SortStringChanged(ByVal sender As Object, ByVal e As Zuby.ADGV.AdvancedDataGridView.SortEventArgs)
+        Try
+            If String.IsNullOrEmpty(dataGridView1.SortString) = True Then Return
+
+            Dim sortStr = dataGridView1.SortString.Replace("[", "").Replace("]", "")
+
+            If String.IsNullOrEmpty(dataGridView1.FilterString) = True Then
+                ' the grid is not filtered!
+                m_dataGridBindingList = m_dataGridBindingList.OrderBy(sortStr).ToList()
+                dataGridView1.DataSource = m_dataGridBindingList
+            Else
+                ' the grid is filtered!
+                m_filteredList = m_filteredList.OrderBy(sortStr).ToList()
+                dataGridView1.DataSource = m_filteredList
+            End If
+
+            textBox_sort.Text = sortStr
+        Catch ex As Exception
+        End Try
+    End Sub
+
+    Private Function FilterStringConverter(ByVal filter As String) As String
+        Dim newColFilter = ""
+
+        filter = filter.Replace("(", "").Replace(")", "")
+
+        Dim colFilterList = filter.Split(New String() {"AND"}, StringSplitOptions.None)
+
+        Dim andOperator = ""
+
+        For Each colFilter In colFilterList
+            newColFilter += andOperator
+
+            Dim colName = ""
+
+            ' Step 1: BOOLEAN Check 
+            If colFilter.Contains(" IN ") = False AndAlso colFilter.Split("="c).Length = 2 Then
+                ' if the filter string is in the form "ColumnName=value". example = "(InAlarm != null && (InAlarm == true))";
+                colName = colFilter.Split("="c)(0)
+                Dim booleanVal = colFilter.Split("="c)(1)
+
+                newColFilter += $"({colName} != null && ({colName} == {booleanVal}))"
+
+                Continue For
+            End If
+
+            ' Step 2: NUMBER (int/decimal/double/etc) and STRING Check
+            If colFilter.Contains(" IN ") = True Then
+                Dim temp1 = colFilter.Trim().Split(New String() {"IN"}, StringSplitOptions.None)
+
+                colName = GetStringBetweenChars(temp1(0), "["c, "]"c)
+
+                Dim filterValsList = temp1(1).Split(","c)
+
+                newColFilter += String.Format("({0} != null && (", colName)
+
+                Dim orOperator = ""
+
+                For Each filterVal In filterValsList
+                    Dim tempNum As Double = 0
+                    If Double.TryParse(filterVal, tempNum) Then
+                        newColFilter += String.Format("{0} {1} = {2}", orOperator, colName, filterVal.Trim())
+                    Else
+                        newColFilter += String.Format("{0} {1}.Contains({2})", orOperator, colName, filterVal.Trim())
+                    End If
+
+                    orOperator = " OR "
+                Next
+
+                newColFilter += "))"
+            End If
+
+            ' Step 3: DATETIME Check
+            If colFilter.Contains(" LIKE ") = True AndAlso colFilter.Contains("Convert[") = True Then
+                ' first of all remove the cast
+                Dim colFilterNoCast = colFilter.Replace("Convert", "").Replace(", 'System.String'", "")
+
+                Dim filterValsList = colFilterNoCast.Trim().Split(New String() {"OR"}, StringSplitOptions.None)
+
+                colName = GetStringBetweenChars(filterValsList(0), "["c, "]"c)
+
+                newColFilter += String.Format("({0} != null && (", colName)
+
+                Dim orOperator = ""
+
+                For Each filterVal In filterValsList
+                    Dim v = GetStringBetweenChars(filterVal, "%"c, "%"c)
+
+                    newColFilter += String.Format("{0} {1}.Date = DateTime.Parse('{2}')", orOperator, colName, v.Trim())
+
+                    orOperator = " OR "
+                Next
+
+                newColFilter += "))"
+            End If
+
+            andOperator = " AND "
+        Next
+
+        Return newColFilter.Replace("'", """")
+    End Function
+
+    Private Function GetStringBetweenChars(ByVal input As String, ByVal startChar As Char, ByVal endChar As Char) As String
+        Dim output = input.Split(startChar, endChar)(1)
+        Return output
+    End Function
+
+    Private Sub dataGridView1_FilterStringChanged(ByVal sender As Object, ByVal e As Zuby.ADGV.AdvancedDataGridView.FilterEventArgs)
+        Try
+            If String.IsNullOrEmpty(dataGridView1.FilterString) = True Then
+                dataGridView1.DataSource = m_dataGridBindingList
+                m_filteredList = m_dataGridBindingList
+            Else
+                Dim listfilter = FilterStringConverter(dataGridView1.FilterString)
+
+                m_filteredList = m_filteredList.Where(listfilter).ToList()
+
+                dataGridView1.DataSource = m_filteredList
+
+                textBox_filter.Text = listfilter
+            End If
+        Catch ex As Exception
+        End Try
+    End Sub
+
+    Private Sub dataGridView1_CellContentClick(ByVal sender As Object, ByVal e As DataGridViewCellEventArgs)
+
+    End Sub
+
+    Private Sub button_unloadfilters_Click(ByVal sender As Object, ByVal e As EventArgs)
+        dataGridView1.CleanFilterAndSort()
+
+        textBox_filter.Text = ""
+        textBox_sort.Text = ""
+    End Sub
+End Class
