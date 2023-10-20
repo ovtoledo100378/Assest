@@ -313,7 +313,22 @@ Private Sub selectedColumnsButton_Click( _
 
 End Sub
 
+Private Sub SurroundingSub()
+    Dim oldColumn As DataGridViewColumn = dataGridView1.SortedColumn
 
+    Dim direction As ListSortDirection
+    If dataGridView1.SortOrder Is SortOrder.Ascending Then
+        direction = ListSortDirection.Ascending
+    Else
+        direction = ListSortDirection.Descending
+    End If
+
+    databaseUpdateFunction()
+
+    Dim newColumn As DataGridViewColumn = dataGridView1.Columns(oldColumn.Name.ToString())
+    dataGridView1.Sort(newColumn, direction)
+    newColumn.HeaderCell.SortGlyphDirection = If(direction Is ListSortDirection.Ascending, SortOrder.Ascending, SortOrder.Descending)
+End Sub
 
 
 
